@@ -8,9 +8,13 @@
 #ifndef KOHONEN_H_
 #define KOHONEN_H_
 
+#include "Utilities.h"
+
 #include <math.h>
-#include <stdlib.h>
+#include <cstdlib>
+#include <thrust/functional.h>
 #include <thrust/device_vector.h>
+#include <thrust/iterator/discard_iterator.h>
 
 //------------------------------------------------------------------------------
 // Class:       Kohonen
@@ -19,32 +23,6 @@
 //------------------------------------------------------------------------------
 class Kohonen
 {
-  // member types
-public:
-  //----------------------------------------------------------------------------
-  // Name:        NodeDistance
-  // Description: A functor whose operator()(unsigned int, unsigned int) method
-  //                returns the distance between two nodes whose indices are
-  //                provided.  The user may override the method in this class
-  //                to override the default behavior.  Specific implementations
-  //                for 1, 2 and 3 dimensional networks is provided, and are
-  //                used by default when possible
-  //----------------------------------------------------------------------------
-  class NodeDistance
-  {
-  public:
-    //--------------------------------------------------------------------------
-    // Name:        operator()
-    // Description: Returns the distance between the two network nodes given
-    // Parameters:  idx1 - The index of the first node
-    //              idx2 - The index of the second node
-    // Returns:     The distance between nodes at idx1 and idx2
-    // Notes:       None
-    //--------------------------------------------------------------------------
-    virtual float operator()(const unsigned int idx1,
-        const unsigned int idx2) = 0;
-  };
-
   // member methods
 public:
   //----------------------------------------------------------------------------
@@ -53,7 +31,7 @@ public:
   // Parameters:  numInputDimensions - The number of dimensions of the input
   //                training data
   //              numOutputDimensions - The number of dimensions of the network.
-  //                This is usally less than numInputDimensions
+  //                This is usually less than numInputDimensions
   //              networkSize - An array of numOutputDimensions elements, each
   //                of which indicates the size of the network space in the
   //                corresponding dimension.  I.e., the i'th item in
@@ -70,7 +48,7 @@ public:
   Kohonen(const unsigned int numInputDimensions,
       const unsigned int numOutputDimensions,
       const unsigned int * const networkSize,
-      NodeDistance* const nodeDistance = NULL);
+      const Utilities::NodeDistance& nodeDistance = Utilities::nodeDistance1d);
 
   //----------------------------------------------------------------------------
   // Name:        ~Kohonen
@@ -112,8 +90,73 @@ public:
   // Returns:     N/A
   // Notes:       None
   //----------------------------------------------------------------------------
+  template <typename WeightDifferenceOperator,
+    typename WeightReductionOperator>
   void train(const float * const points, const unsigned int numPoints,
-      const unsigned int numIterators, const bool randomize = false);
+      const unsigned int numIterations, const bool randomize = false)
+  {
+    if (randomInitialization)
+    {
+      // Generate initialization on host
+      thrust::host_vector<float> initialHost(
+          prodNetworkSize * numOutputDimensions);
+      thrust::generate(initialHost.begin(), initialHost.end(), rand);
+
+      // Copy to device
+      thrust::copy(initialHost.begin(), initialHost.end(), network.begin());
+    }
+
+    // Copy the points to the device
+    thrust::device_vector<float> pointsDevice(points,
+        points + numPoints * numInputDimensions),
+        differences(numPoints * numInputDimensions), distances(numPoints);
+
+    for (unsigned int i = 0; i < numIterations; ++i)
+    {
+      // Loop through all of the points
+      thrust::device_vector<float>::const_iterator currentPoint =
+          pointsDevice.begin();
+      for (unsigned int j = 0; j < numPoints;
+          ++j, currentPoint += numInputDimensions)
+      {
+        // Compute the point-by-point difference using WeightDifferenceOperator
+        thrust::transform(pointsDevice.begin(), pointsDevice.end(),
+            thrust::make_permutation_iterator(
+                currentPoint,
+                thrust::make_transform_iterator(
+                    thrust::make_counting_iterator(0u),
+                    Utilities::ModConstant<unsigned int>(numInputDimensions))),
+            differences.begin(),
+            WeightDifferenceOperator());
+
+        // Reduce each row into a single distance using WeightReductionOperator
+        thrust::reduce_by_key(
+            thrust::make_transform_iterator(thrust::make_counting_iterator(0u),
+                Utilities::DivideConstant<unsigned int>(numInputDimensions)),
+            thrust::make_transform_iterator(thrust::make_counting_iterator(0u),
+                Utilities::DivideConstant<unsigned int>(numInputDimensions)) +
+                differences.size(),
+            differences.begin(),
+            thrust::make_discard_iterator(),
+            distances.begin(),
+            thrust::equal_to<unsigned int>(),
+            WeightReductionOperator());
+
+        // Find the winner (i.e., node with closest weight)
+        thrust::tuple<float, unsigned int> winner = thrust::min_element(
+            thrust::make_zip_iterator(
+                thrust::make_tuple(distances.begin(),
+                    thrust::make_counting_iterator(0u))),
+            thrust::make_zip_iterator(
+                thrust::make_tuple(distances.begin(),
+                    thrust::make_counting_iterator(0u))) + distances.size());
+        const unsigned int winnerIdx = thrust::get<1>(winner);
+
+        // Update the weights based upon the node distance to the winner
+      }
+    }
+
+  }
 
   //----------------------------------------------------------------------------
   // Name:        getPoints
@@ -137,8 +180,7 @@ private:
   const unsigned int numOutputDimensions;
   unsigned int *networkSize;
   unsigned int prodNetworkSize;
-  NodeDistance* nodeDistance;
-  bool ownNodeDistanceObject;
+  const Utilities::NodeDistance &nodeDistance;
 
   thrust::device_vector<float> network;
   bool randomInitialization;

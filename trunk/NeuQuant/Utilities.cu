@@ -7,25 +7,28 @@
 
 #include "Utilities.h"
 
+const Utilities::NodeDistance1D Utilities::nodeDistance1d =
+    Utilities::NodeDistance1D();
+
 //------------------------------------------------------------------------------
-// Name:        NodeDistance1::operator()
+// Name:        NodeDistance1D::operator()
 //------------------------------------------------------------------------------
-float Utilities::NodeDistance1::operator ()(const unsigned int idx1,
+float Utilities::NodeDistance1D::operator ()(const unsigned int idx1,
     const unsigned int idx2)
 {
   return static_cast<float>(idx1 < idx2 ? idx2 - idx1 : idx1 - idx2);
 }
 
 //------------------------------------------------------------------------------
-// Name:        NodeDistance2::NodeDistance2()
+// Name:        NodeDistance2D::NodeDistance2D()
 //------------------------------------------------------------------------------
-Utilities::NodeDistance2::NodeDistance2(const unsigned int cols) : cols(cols)
+Utilities::NodeDistance2D::NodeDistance2D(const unsigned int cols) : cols(cols)
 { }
 
 //------------------------------------------------------------------------------
-// Name:        NodeDistance2::operator()
+// Name:        NodeDistance2D::operator()
 //------------------------------------------------------------------------------
-float Utilities::NodeDistance2::operator()(const unsigned int idx1,
+float Utilities::NodeDistance2D::operator()(const unsigned int idx1,
     const unsigned int idx2)
 {
   const unsigned int row1 = idx1 / cols, col1 = idx1 % cols;
@@ -36,16 +39,16 @@ float Utilities::NodeDistance2::operator()(const unsigned int idx1,
 }
 
 //------------------------------------------------------------------------------
-// Name:        NodeDistance3::NodeDistance3()
+// Name:        NodeDistance3D::NodeDistance3D()
 //------------------------------------------------------------------------------
-Utilities::NodeDistance3::NodeDistance3(const unsigned int cols,
+Utilities::NodeDistance3D::NodeDistance3D(const unsigned int cols,
     const unsigned int sliceSize) : cols(cols), sliceSize(sliceSize)
 { }
 
 //------------------------------------------------------------------------------
-// Name:        NodeDistance3::operator()
+// Name:        NodeDistance3D::operator()
 //------------------------------------------------------------------------------
-float Utilities::NodeDistance3::operator()(const unsigned int idx1,
+float Utilities::NodeDistance3D::operator()(const unsigned int idx1,
     const unsigned int idx2)
 {
   const unsigned int slice1 = idx1 / sliceSize,
