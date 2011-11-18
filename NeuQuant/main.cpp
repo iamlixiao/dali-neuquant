@@ -2,50 +2,58 @@
  * main.cpp
  *
  *  Created on: Sep 25, 2011
- *      Author: Dave
+ *      Author: David Bottisti
  */
 
 #include "NEUQUANT.h"
+#include "Kohonen.h"
 #include "CImg.h"
+
+#include <cuda.h>
 #include <time.h>
 #include <unistd.h>
 
-int main(const unsigned int argc, const char * const * const argv)
+int main(const int argc, const char * const * const argv)
 {
-  clock_t elapsedTime = 0, startTime;
+  // Note:  Change sequential to 'true' to run the GPU version
+  const unsigned int sequential = false;
+
+  double elapsedTime = 0, thisTime = 0, startTime;
+  struct timespec tp;
   cimg_library::cimg::exception_mode(1);
 
   // Load image
-  cimg_library::CImg<unsigned char> imgRGBSlices;
+  cimg_library::CImg<float> imgRGBSlices;
 
-  for (unsigned int j = 1; j < argc; ++j)
+  try
   {
-    try
+    imgRGBSlices.load_jpeg(argv[1]);
+    if (imgRGBSlices.spectrum() != 3)
+      return 1;
+    const unsigned int size = imgRGBSlices.width() * imgRGBSlices.height();
+
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tp);
+    startTime = tp.tv_sec + tp.tv_nsec * 0.000000001;
+
+    if (sequential)
     {
-      printf("Trying file: %s\n", argv[j]);
-      imgRGBSlices.load_jpeg(argv[j]);
-      if (imgRGBSlices.spectrum() != 3)
-      {
-        printf("  Error: File not color.  Skipping\n");
-        continue;
-      }
-
       unsigned char *imgBGR = new unsigned char[imgRGBSlices.size()];
-
-      startTime = clock();
-
       // Reshape the image into BGR order
-      unsigned char *red = imgRGBSlices.data(0, 0, 0, 0), *green = imgRGBSlices.data(0, 0, 0, 1),
+      float *red = imgRGBSlices.data(0, 0, 0, 0),
+          *green = imgRGBSlices.data(0, 0, 0, 1),
           *blue = imgRGBSlices.data(0, 0, 0, 2);
       unsigned char *out = imgBGR;
-      const unsigned int size = imgRGBSlices.width() * imgRGBSlices.height();
       for (unsigned int i = 0; i < size; ++i, ++red, ++green, ++blue)
       {
-        out[0] = *blue;
-        out[1] = *green;
-        out[2] = *red;
+        out[0] = static_cast<unsigned int>(*blue);
+        out[1] = static_cast<unsigned int>(*green);
+        out[2] = static_cast<unsigned int>(*red);
         out += 3;
       }
+
+      red = imgRGBSlices.data(0, 0, 0, 0);
+      green = imgRGBSlices.data(0, 0, 0, 1);
+      blue = imgRGBSlices.data(0, 0, 0, 2);
 
       // Initialize neuquant
       initnet(imgBGR, 3*size, 1);
@@ -54,10 +62,7 @@ int main(const unsigned int argc, const char * const * const argv)
       learn();
       unbiasnet();
 
-      // Create output image (overwrite imgRGBSlices)
-      red = imgRGBSlices.data(0, 0, 0, 0);
-      green = imgRGBSlices.data(0, 0, 0, 1);
-      blue = imgRGBSlices.data(0, 0, 0, 2);
+        // Create output image (overwrite imgRGBSlices)
       for (unsigned int i = 0; i < size; ++i, ++red, ++green, ++blue)
       {
         unsigned char index = inxsearch(*blue, *green, *red);
@@ -65,24 +70,26 @@ int main(const unsigned int argc, const char * const * const argv)
         *green = getNetwork(index, 1);
         *blue = getNetwork(index, 0);
       }
-      elapsedTime += (clock() - startTime);
-      printf("  Elapsed time: %f sec, Average time: %f sec\n", static_cast<double>(elapsedTime) / CLOCKS_PER_SEC,
-          static_cast<double>(elapsedTime / j) / CLOCKS_PER_SEC);
-
-#if cimg_display != 0
-      imgRGBSlices.display();
-#endif
-
       delete [] imgBGR;
     }
-    catch (std::exception &e)
+    else
     {
-      unlink(argv[j]);
-      printf("  Error: File not a jpeg.  Skipping.\n");
+      Kohonen kohonen;
+      kohonen.train(imgRGBSlices.width(), imgRGBSlices.height(),
+          imgRGBSlices.data());
     }
-  }
 
-  printf("Total time: %f seconds.\n", static_cast<double>(elapsedTime) / CLOCKS_PER_SEC);
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tp);
+    thisTime = (tp.tv_sec + tp.tv_nsec * 0.000000001) - startTime;
+    elapsedTime += thisTime;
+
+    printf("%d  %f\n", size, thisTime);
+
+  }
+  catch (std::exception &e)
+  {
+      printf("  Error: File not a jpeg.  Skipping.\n");
+  }
 
   return 0;
 }

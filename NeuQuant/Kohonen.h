@@ -2,7 +2,7 @@
  * Kohonen.h
  *
  *  Created on: Oct 29, 2011
- *      Author: Dave
+ *      Author: David Bottisti
  */
 
 #ifndef KOHONEN_H_
@@ -44,4 +44,4 @@ public:
   static const unsigned short primes[4];
 };
 
-#endif /* KOHONEN2_H_ */
+#endif /* KOHONEN_H_ */

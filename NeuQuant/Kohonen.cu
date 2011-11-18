@@ -2,7 +2,7 @@
  * Kohonen.cu
  *
  *  Created on: Oct 29, 2011
- *      Author: Dave
+ *      Author: David Bottisti
  */
 
 #include "Kohonen.h"
@@ -151,7 +151,6 @@ Kohonen::Kohonen(void)
 
 Kohonen::~Kohonen()
 {
-//  cudaFree(network);
 }
 
 void Kohonen::train(const unsigned int width, const unsigned int height,
