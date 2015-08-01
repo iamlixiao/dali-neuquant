@@ -1,0 +1,1 @@
+This project tries to parallelize the NeuQuant Neural-Net image quantization algorithm to be able to run using a GPU.
